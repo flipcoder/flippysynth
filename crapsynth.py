@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python
 import sys, time, math, random
 import pyaudio
 import numpy as np
@@ -14,8 +14,8 @@ class Synth(Device):
 
     SINE = lambda f: math.sin(math.tau * f)
     TRIANGLE = lambda f: -f if math.fmod(f*2.0) > 0.5 else f + 0.25
-    SQUARE = lambda f: 1.0 if f < 0.5 else -1.0
-    SAW = lambda f: math.fmod(f + 0.5, 1.0)
+    SQUARE = lambda f: 1.0 if math.fmod(f,1.0) < 0.5 else -1.0
+    SAW = lambda f: math.fmod(f,1.0) - 0.5
     NOISE = lambda f: random.random()
     
     FRAMES = 512
@@ -53,7 +53,7 @@ class Synth(Device):
             self.dest.pitch = Synth.midi_to_pitch(n)
             self.dest.amp = v
             self.next = True
-            print('note', n, v, self.dest.pitch)
+            # print('note', n, v, self.dest.pitch)
         # def on(self):
         #     self.note(0, 1.0)
         def generate(self):
@@ -64,8 +64,13 @@ class Synth(Device):
             self.next = True
         def swap(self):
             nx = self.dest
+            self.dest = None
             self.reset()
             nx.dest = self
+            # nx = self.dest
+            # self.dest = None
+            # self.reset()
+            # nx.dest = self
             return nx
         def sample(self, n, block_recur=False):
             osc = self
@@ -92,7 +97,7 @@ class Synth(Device):
     def __init__(self):
         self.audio = pyaudio.PyAudio()
         self.midinotes = [None] * 127
-        self.crush = 256
+        self.crush = 1
         self.osc = 1
         self.osc_count = 0
         self.oscs = [Synth.Oscillator(self) for x in range(self.osc)]
@@ -165,18 +170,27 @@ class Synth(Device):
         self.oscs.sort(key=lambda x: x.midinote==-1)
 
 if __name__=='__main__':
+    notelen = 0.29
+    notespace = 0.01
+    
     synth = Synth()
     for i in range(3):
-        print('a')
-        synth.note(60 + i * 2, func=Synth.SAW)
-        print('b')
-        time.sleep(0.5)
-        print('c')
+        synth.note(60 + i * 2, func=Synth.SQUARE)
+        time.sleep(notelen)
         synth.off()
-        time.sleep(0.5)
-        print('d')
+        time.sleep(notespace)
+    for i in range(4):
+        synth.note(65 + i * 2, func=Synth.SQUARE)
+        time.sleep(notelen)
+        synth.off()
+        time.sleep(notespace)
+    
+    synth.note(72, func=Synth.SQUARE)
+    time.sleep(notelen)
+    synth.off()
+    time.sleep(notespace)
+
     synth.deinit()
-    print('e')
 
     del synth
 
