@@ -22,6 +22,24 @@ class Synth(Device):
     RATE = 44100
     CHANNELS = 1
     WIDTH = 2
+    
+    class FX:
+        pass
+    class Filter(FX):
+        class Type:
+            NONE = 0
+            LP = 1
+            HP = 2
+            BP = 3
+        def __init__(self):
+            self.val = [0.5, 0.0]
+            self.names = ["cutoff","resonance"]
+            self.type = Synth.Filter.Type.LP
+            self.buf = [0] * 4
+        def __call__(self, v):
+            # cutoff = max(0.01,min(0.99,val))
+            return v
+    
     class Oscillator:
         def __init__(self, synth, dest=True):
             self.reset()
@@ -94,13 +112,13 @@ class Synth(Device):
             return osc, v
         def done(self):
             return (self.next and self.dest.midinote==-1) or (not self.next and self.midinote==-1)
-    def __init__(self):
+    def __init__(self, polyphony=1):
         self.audio = pyaudio.PyAudio()
         self.midinotes = [None] * 127
         self.crush = 1
-        self.osc = 1
-        self.osc_count = 0
-        self.oscs = [Synth.Oscillator(self) for x in range(self.osc)]
+        self.polyphony = polyphony
+        self.oscs_working = 0 # running total
+        self.oscs = [Synth.Oscillator(self) for x in range(self.polyphony)]
         self.buf = array('h', list(range(Synth.FRAMES)))
         self.stream = self.audio.open(
             format=self.audio.get_format_from_width(Synth.WIDTH),
@@ -111,6 +129,7 @@ class Synth(Device):
             stream_callback=self.callback()
         )
         self.stream.start_stream()
+        self.fxrack = [Synth.Filter()]
     @staticmethod
     def midi_to_pitch(f):
         return pow(2.0, (f - 69.0)/12.0) * 440.0
@@ -118,12 +137,12 @@ class Synth(Device):
         def internal_callback(in_data, frame_count, time_info, status):
             for n in range(frame_count):
                 self.buf[n] = 0
-            self.osc_count = 0
+            self.oscs_working = 0
             for o in range(len(self.oscs)):
                 osc = self.oscs[o]
                 if osc.done():
                     break
-                self.osc_count += 1
+                self.oscs_working += 1
                 vs = 0
                 for n in range(frame_count // osc.rate_crush):
                     osc, smp = osc.sample(n)
@@ -138,12 +157,14 @@ class Synth(Device):
         # while self.stream.is_active():
         #     time.sleep(0.1)
     def fx(self, v):
+        for fxfunc in self.fxrack:
+            v = fxfunc(v)
         return v
     def deinit(self):
         for osc in self.oscs:
             if osc.midinote >= 0:
                 osc.off()
-                while self.osc_count > 0:
+                while self.oscs_working > 0:
                     time.sleep(0.1)
         self.stream.stop_stream()
         self.stream.close()
@@ -158,9 +179,10 @@ class Synth(Device):
                 osc.note(n, v, func=func)
                 return o
             o += 1
-        osc = self.oscs[0]
-        osc.note(n, v, func=func)
-        return 0
+        return -1
+        # osc = self.oscs[0]
+        # osc.note(n, v, func=func)
+        # return 0
     def off(self, **kwargs):
         ch = kwargs.get('ch', None)
         for osc in self.oscs:
@@ -172,20 +194,16 @@ class Synth(Device):
 if __name__=='__main__':
     notelen = 0.29
     notespace = 0.01
+    C = 60
+    F = 65
     
     synth = Synth()
-    for i in range(3):
-        synth.note(60 + i * 2, func=Synth.SQUARE)
+    for i in range(7):
+        print(synth.note(C + i * 2 - (1 if i >= 3 else 0), func=Synth.SQUARE))
         time.sleep(notelen)
         synth.off()
         time.sleep(notespace)
-    for i in range(4):
-        synth.note(65 + i * 2, func=Synth.SQUARE)
-        time.sleep(notelen)
-        synth.off()
-        time.sleep(notespace)
-    
-    synth.note(72, func=Synth.SQUARE)
+    synth.note(C + 12, func=Synth.SQUARE)
     time.sleep(notelen)
     synth.off()
     time.sleep(notespace)
