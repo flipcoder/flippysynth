@@ -8,8 +8,6 @@ from typing import Callable, Optional, List
 from enum import Enum
 import cython
 
-STUFF = "HI"
-
 
 class Device:
     pass
